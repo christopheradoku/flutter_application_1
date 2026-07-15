@@ -1,5 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/farm_provider.dart';
+import '../models/farm_models.dart';
+import '../widgets/form_sheet.dart';
 
 class VaccinationScreen extends StatefulWidget {
   const VaccinationScreen({super.key});
@@ -11,22 +15,19 @@ class VaccinationScreen extends StatefulWidget {
 class _VaccinationScreenState extends State<VaccinationScreen> {
   int? _selectedIndex;
 
-  final List<Map<String, dynamic>> schedule = [
-    {'name': 'Newcastle Disease', 'date': 'Jul 02', 'done': true, 'birds': 3600, 'type': 'Intraocular', 'upcoming': false},
-    {'name': 'Infectious Bronchitis', 'date': 'Jul 05', 'done': true, 'birds': 3600, 'type': 'Drinking water', 'upcoming': false},
-    {'name': 'Gumboro Disease', 'date': 'Jul 12', 'done': true, 'birds': 3580, 'type': 'Drinking water', 'upcoming': false},
-    {'name': 'Marek\'s Disease', 'date': 'Jul 18', 'done': false, 'birds': 3600, 'type': 'Subcutaneous', 'upcoming': true},
-    {'name': 'Fowl Pox', 'date': 'Jul 28', 'done': false, 'birds': 3600, 'type': 'Wing web', 'upcoming': false},
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final farm = context.watch<FarmProvider>();
+    if (farm.isLoading) return const Center(child: CircularProgressIndicator());
+
+    final schedule = farm.vaccinations;
+    final next = farm.nextUpcomingVaccination;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           const Padding(
             padding: EdgeInsets.only(top: 12, bottom: 20),
             child: Column(
@@ -37,8 +38,6 @@ class _VaccinationScreenState extends State<VaccinationScreen> {
               ],
             ),
           ),
-
-          // Progress Ring Area
           _buildGlassContainer(
             child: Row(
               children: [
@@ -49,12 +48,12 @@ class _VaccinationScreenState extends State<VaccinationScreen> {
                     fit: StackFit.expand,
                     children: [
                       CircularProgressIndicator(
-                        value: 0.88,
+                        value: farm.vaccinationProgress,
                         strokeWidth: 8,
                         backgroundColor: const Color(0x264A9FD4),
                         valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4A9FD4)),
                       ),
-                      const Center(child: Text('88%', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2A2000)))),
+                      Center(child: Text('${(farm.vaccinationProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2A2000)))),
                     ],
                   ),
                 ),
@@ -63,42 +62,35 @@ class _VaccinationScreenState extends State<VaccinationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Programme Complete', style: TextStyle(fontSize: 12, color: Color(0x803C320A))),
-                    const Text('3 / 5', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
+                    Text('${farm.vaccinationsDoneCount} / ${schedule.length}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
                     const Text('Vaccines administered', style: TextStyle(fontSize: 12, color: Color(0x803C320A))),
                     const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0x2E4A9FD4),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0x4D4A9FD4)),
+                    if (next != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: const Color(0x2E4A9FD4), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0x4D4A9FD4))),
+                        child: Text('Next: ${_fmt(next.scheduledDate)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4A9FD4))),
                       ),
-                      child: const Text('Next: Jul 18', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4A9FD4))),
-                    ),
                   ],
                 ),
               ],
             ),
           ),
           const SizedBox(height: 16),
-
           const Text('PROGRAMME SCHEDULE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0x733C320A), letterSpacing: 1.2)),
           const SizedBox(height: 12),
-
-          // Schedule List
           Column(
             children: List.generate(schedule.length, (i) {
               final v = schedule[i];
-              final isDone = v['done'] as bool;
-              final isUpcoming = v['upcoming'] as bool;
+              final isDone = v.isDone;
+              final isUpcoming = !isDone && v == next;
               final isSelected = _selectedIndex == i;
 
               Color bgColor = Colors.white.withValues(alpha: 0.28);
               Color borderColor = Colors.white.withValues(alpha: 0.6);
-
               if (isUpcoming) {
-                bgColor = const Color(0x1F4A9FD4); // 0.12 opacity blue
-                borderColor = const Color(0x664A9FD4); // 0.4 opacity blue
+                bgColor = const Color(0x1F4A9FD4);
+                borderColor = const Color(0x664A9FD4);
               }
 
               return Padding(
@@ -112,18 +104,14 @@ class _VaccinationScreenState extends State<VaccinationScreen> {
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: borderColor, width: 1.5),
-                        ),
+                        decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: borderColor, width: 1.5)),
                         child: Column(
                           children: [
                             Row(
                               children: [
-                                // Icon/Number Circle
                                 Container(
-                                  width: 32, height: 32,
+                                  width: 32,
+                                  height: 32,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: isDone ? const Color(0x337A9A00) : (isUpcoming ? const Color(0x334A9FD4) : const Color(0x0F000000)),
@@ -141,18 +129,20 @@ class _VaccinationScreenState extends State<VaccinationScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(v['name'], style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
-                                      Text('${v['type']} · ${v['date']}', style: const TextStyle(fontSize: 12, color: Color(0x803C320A))),
+                                      Text(v.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
+                                      Text('${v.method} · ${_fmt(v.scheduledDate)}', style: const TextStyle(fontSize: 12, color: Color(0x803C320A))),
                                     ],
                                   ),
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isDone ? const Color(0x267A9A00) : const Color(0x0F000000),
-                                    borderRadius: BorderRadius.circular(12),
+                                GestureDetector(
+                                  onTap: isDone
+                                      ? null
+                                      : () => context.read<FarmProvider>().markVaccinationAdministered(v.id),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(color: isDone ? const Color(0x267A9A00) : const Color(0x0F000000), borderRadius: BorderRadius.circular(12)),
+                                    child: Text(isDone ? 'Done' : 'Mark done', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDone ? const Color(0xFF5A7A00) : const Color(0x663C320A))),
                                   ),
-                                  child: Text(isDone ? 'Done' : 'Pending', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDone ? const Color(0xFF5A7A00) : const Color(0x663C320A))),
                                 ),
                               ],
                             ),
@@ -160,7 +150,7 @@ class _VaccinationScreenState extends State<VaccinationScreen> {
                               const SizedBox(height: 12),
                               Container(height: 1, color: Colors.white.withValues(alpha: 0.3)),
                               const SizedBox(height: 12),
-                              Text('Birds: ${v['birds']} · Method: ${v['type']} · Date: ${v['date']}', style: const TextStyle(fontSize: 12, color: Color(0x993C320A))),
+                              Text('Birds: ${v.birds} · Method: ${v.method} · Date: ${_fmt(v.scheduledDate)}', style: const TextStyle(fontSize: 12, color: Color(0x993C320A))),
                             ]
                           ],
                         ),
@@ -172,31 +162,124 @@ class _VaccinationScreenState extends State<VaccinationScreen> {
             }),
           ),
           const SizedBox(height: 16),
-
-          // Action Button
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF4A9FD4), Color(0xFF2A7FB4)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: const [BoxShadow(color: Color(0x664A9FD4), blurRadius: 16, offset: Offset(0, 4))],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () {},
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(
-                    child: Text('+ Record Vaccination', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                ),
-              ),
-            ),
+          FarmPrimaryButton(
+            label: '+ Schedule / Record Vaccine',
+            colors: const [Color(0xFF4A9FD4), Color(0xFF2A7FB4)],
+            onPressed: () => _openRecordVaccinationSheet(context),
           ),
         ],
       ),
+    );
+  }
+
+  String _fmt(DateTime d) => '${_month(d.month)} ${d.day.toString().padLeft(2, '0')}';
+  String _month(int m) => const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+
+  void _openRecordVaccinationSheet(BuildContext context) {
+    final nameCtrl = TextEditingController();
+    final birdsCtrl = TextEditingController();
+    String method = 'Drinking water';
+    bool isAdministered = false;
+    DateTime scheduledDate = DateTime.now();
+
+    showFarmFormSheet(
+      context: context,
+      title: 'Log Vaccination',
+      builder: (ctx, setModalState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: InputDecoration(
+                labelText: 'Vaccine name (e.g., Newcastle, Gumboro)',
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.04),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FarmNumberField(label: 'Birds covered', controller: birdsCtrl),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: method,
+              decoration: InputDecoration(
+                labelText: 'Method',
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.04),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+              items: const ['Intraocular', 'Drinking water', 'Subcutaneous', 'Wing web', 'Spray']
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                  .toList(),
+              onChanged: (v) => setModalState(() => method = v ?? method),
+            ),
+            const SizedBox(height: 16),
+            
+            // --- NEW: Toggle and Date Picker ---
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(12)
+              ),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Already Administered?', style: TextStyle(fontSize: 14)),
+                    value: isAdministered,
+                    activeColor: const Color(0xFF4A9FD4),
+                    onChanged: (v) => setModalState(() => isAdministered = v),
+                  ),
+                  ListTile(
+                    title: Text(isAdministered ? 'Administered On:' : 'Schedule For:', style: const TextStyle(fontSize: 14)),
+                    subtitle: Text(_fmt(scheduledDate), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A9FD4))),
+                    trailing: const Icon(Icons.calendar_today, color: Color(0xFF4A9FD4)),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: scheduledDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(primary: Color(0xFF4A9FD4)),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setModalState(() => scheduledDate = picked);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            FarmPrimaryButton(
+              label: 'Save Record',
+              colors: const [Color(0xFF4A9FD4), Color(0xFF2A7FB4)],
+              onPressed: () async {
+                if (nameCtrl.text.trim().isEmpty) return;
+                final farm = context.read<FarmProvider>();
+                final record = VaccinationRecord(
+                  id: '', // Will be generated by Firestore
+                  name: nameCtrl.text.trim(),
+                  scheduledDate: scheduledDate,
+                  administeredDate: isAdministered ? scheduledDate : null,
+                  birds: int.tryParse(birdsCtrl.text) ?? farm.flockInfo.flockSize,
+                  method: method,
+                );
+                await farm.addVaccinationRecord(record);
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 

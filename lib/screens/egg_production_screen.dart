@@ -1,6 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'package:provider/provider.dart';
+import '../providers/farm_provider.dart';
+import '../models/farm_models.dart';
+import '../widgets/form_sheet.dart';
 
 class EggProductionScreen extends StatefulWidget {
   const EggProductionScreen({super.key});
@@ -10,66 +14,127 @@ class EggProductionScreen extends StatefulWidget {
 }
 
 class _EggProductionScreenState extends State<EggProductionScreen> {
-  // Tab state: 'daily' or 'grade'
   String _selectedTab = 'daily';
-
-  // Data
-  final List<int> weekEggs = [2600, 2720, 2800, 2840, 2810, 2750, 2690];
-  final List<String> days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  
-  final List<Map<String, dynamic>> grades = [
-    {'grade': 'A (Large)', 'count': 1840, 'pct': 65, 'color': const Color(0xFFC0860A)},
-    {'grade': 'B (Medium)', 'count': 710, 'pct': 25, 'color': const Color(0xFFE8A020)},
-    {'grade': 'C (Small)', 'count': 200, 'pct': 7, 'color': const Color(0xFFFFE066)},
-    {'grade': 'Cracked/Reject', 'count': 90, 'pct': 3, 'color': const Color(0x4D3C320A)}, // 0.3 opacity
+  static const List<String> _dayLabels = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
   ];
 
   @override
   Widget build(BuildContext context) {
-    final int maxEggs = weekEggs.reduce(max);
+    final farm = context.watch<FarmProvider>();
+    if (farm.isLoading) return const Center(child: CircularProgressIndicator());
+
+    final weekData = farm.last7DaysEggs;
+    final weekTotals = weekData.map((e) => e.total).toList();
+    final maxEggs = weekTotals.reduce(max).clamp(1, 1 << 30);
+    final today =
+        farm.todayEggCollection ?? EggCollection(date: DateTime.now());
+
+    final gradeTotals = <String, int>{
+      'A (Large)': weekData.fold(0, (s, e) => s + e.gradeA),
+      'B (Medium)': weekData.fold(0, (s, e) => s + e.gradeB),
+      'C (Small)': weekData.fold(0, (s, e) => s + e.gradeC),
+      'Cracked/Reject': weekData.fold(0, (s, e) => s + e.cracked),
+    };
+    final gradeColors = {
+      'A (Large)': const Color(0xFFC0860A),
+      'B (Medium)': const Color(0xFFE8A020),
+      'C (Small)': const Color(0xFFFFE066),
+      'Cracked/Reject': const Color(0x4D3C320A),
+    };
+    final weekEggTotal = weekTotals.fold(0, (a, b) => a + b).clamp(1, 1 << 30);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           const Padding(
             padding: EdgeInsets.only(top: 12, bottom: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Egg Production', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
-                Text('Collection & grading', style: TextStyle(fontSize: 12, color: Color(0x803C320A))),
+                Text(
+                  'Egg Production',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2A2000),
+                  ),
+                ),
+                Text(
+                  'Collection & grading',
+                  style: TextStyle(fontSize: 12, color: Color(0x803C320A)),
+                ),
               ],
             ),
           ),
-
-          // Hero Section
           _buildGlassContainer(
             child: Column(
               children: [
-                const Text("Today's Collection", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0x803C320A))),
+                const Text(
+                  "Today's Collection",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0x803C320A),
+                  ),
+                ),
                 const SizedBox(height: 4),
-                const Text('2,840', style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Color(0xFF2A2000), letterSpacing: -1)),
-                const Text('eggs', style: TextStyle(fontSize: 14, color: Color(0xFFC0860A))),
+                Text(
+                  '${today.total}',
+                  style: const TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2A2000),
+                    letterSpacing: -1,
+                  ),
+                ),
+                const Text(
+                  'eggs',
+                  style: TextStyle(fontSize: 14, color: Color(0xFFC0860A)),
+                ),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildHeroStat('91%', 'Lay Rate'),
-                    Container(width: 1, height: 30, color: Colors.black12, margin: const EdgeInsets.symmetric(horizontal: 24)),
-                    _buildHeroStat('+3.2%', 'vs Yesterday'),
-                    Container(width: 1, height: 30, color: Colors.black12, margin: const EdgeInsets.symmetric(horizontal: 24)),
-                    _buildHeroStat('3,120', 'Hens Active'),
+                    _buildHeroStat(
+                      today.hensActive == 0
+                          ? '—'
+                          : '${(today.total / today.hensActive * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                      'Lay Rate',
+                    ),
+                    Container(
+                      width: 1,
+                      height: 30,
+                      color: Colors.black12,
+                      margin: const EdgeInsets.symmetric(horizontal: 24),
+                    ),
+                    _buildHeroStat(
+                      weekTotals.length > 1
+                          ? '${(((weekTotals.last - weekTotals[weekTotals.length - 2]) / weekTotals[weekTotals.length - 2]) * 100).toStringAsFixed(1)}%'
+                          : '—',
+                      'vs Yesterday',
+                    ),
+                    Container(
+                      width: 1,
+                      height: 30,
+                      color: Colors.black12,
+                      margin: const EdgeInsets.symmetric(horizontal: 24),
+                    ),
+                    _buildHeroStat('${today.hensActive}', 'Hens Active'),
                   ],
                 ),
               ],
             ),
           ),
           const SizedBox(height: 16),
-
-          // Tab Toggle
           Container(
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.06),
@@ -84,117 +149,224 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Tab Content
           if (_selectedTab == 'daily') ...[
             _buildGlassContainer(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('This Week', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
+                  const Text(
+                    'This Week',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2A2000),
+                    ),
+                  ),
                   const SizedBox(height: 12),
+                  // --- FIXED OVERFLOW LAYOUT HERE ---
                   SizedBox(
-                    height: 96,
+                    height: 120, // Increased height to prevent overflow
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
-                      children: List.generate(weekEggs.length, (index) {
-                        final val = weekEggs[index];
-                        final height = (val / maxEggs) * 80;
-                        final isToday = index == 3; // Matching the highlight in your React code
+                      children: List.generate(weekTotals.length, (index) {
+                        final val = weekTotals[index];
+                        // Max height for the bar is 80, leaving safe padding for the text
+                        final height = maxEggs == 0 ? 0.0 : (val / maxEggs) * 80;
+                        final isToday = index == weekTotals.length - 1;
                         return Expanded(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               Container(
                                 width: double.infinity,
-                                height: height,
-                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                height: height.toDouble(),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
                                 decoration: BoxDecoration(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(8),
+                                  ),
                                   gradient: isToday
-                                      ? const LinearGradient(colors: [Color(0xFFE8A020), Color(0xFFC07010)], begin: Alignment.topCenter, end: Alignment.bottomCenter)
+                                      ? const LinearGradient(
+                                          colors: [
+                                            Color(0xFFE8A020),
+                                            Color(0xFFC07010),
+                                          ],
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                        )
                                       : null,
-                                  color: isToday ? null : const Color(0x4DE8A020),
+                                  color: isToday
+                                      ? null
+                                      : const Color(0x4DE8A020),
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(days[index], style: const TextStyle(fontSize: 9, color: Color(0x663C320A))),
+                              Text(
+                                _dayLabels[index % 7],
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  color: Color(0x663C320A),
+                                ),
+                              ),
                             ],
                           ),
                         );
                       }),
                     ),
                   ),
+                  // --- END FIXED LAYOUT ---
                 ],
               ),
             ),
           ] else ...[
             Column(
-              children: grades.map((g) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildGlassContainer(
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(width: 12, height: 12, decoration: BoxDecoration(color: g['color'], shape: BoxShape.circle)),
-                              const SizedBox(width: 8),
-                              Text(g['grade'], style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
-                            ],
-                          ),
-                          Text(g['count'].toString(), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: g['color'])),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          value: g['pct'] / 100,
-                          backgroundColor: Colors.black.withValues(alpha: 0.08),
-                          valueColor: AlwaysStoppedAnimation<Color>(g['color']),
-                          minHeight: 6,
+              children: gradeTotals.entries.map((g) {
+                final pct = (g.value / weekEggTotal * 100);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _buildGlassContainer(
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: gradeColors[g.key],
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  g.key,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF2A2000),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              g.value.toString(),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: gradeColors[g.key],
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text('${g['pct']}%', style: const TextStyle(fontSize: 12, color: Color(0x663C320A))),
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: LinearProgressIndicator(
+                            value: pct / 100,
+                            backgroundColor: Colors.black.withValues(
+                              alpha: 0.08,
+                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              gradeColors[g.key]!,
+                            ),
+                            minHeight: 6,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            '${pct.toStringAsFixed(0)}%',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0x663C320A),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              )).toList(),
+                );
+              }).toList(),
             ),
           ],
           const SizedBox(height: 16),
-
-          // Action Button
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFFE8A020), Color(0xFFC07010)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: const [BoxShadow(color: Color(0x66E8A020), blurRadius: 16, offset: Offset(0, 4))],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () {},
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(
-                    child: Text('+ Record Collection', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                ),
-              ),
-            ),
+          FarmPrimaryButton(
+            label: '+ Record Collection',
+            colors: const [Color(0xFFE8A020), Color(0xFFC07010)],
+            onPressed: () => _openRecordCollectionSheet(context),
           ),
         ],
       ),
+    );
+  }
+
+  void _openRecordCollectionSheet(BuildContext context) {
+    final aCtrl = TextEditingController();
+    final bCtrl = TextEditingController();
+    final cCtrl = TextEditingController();
+    final crackedCtrl = TextEditingController();
+    
+    // Automatically fill the "Hens Active" box with the total flock size
+    final currentFlockSize = context.read<FarmProvider>().flockInfo.flockSize.toString();
+    final hensActiveCtrl = TextEditingController(text: currentFlockSize);
+
+    showFarmFormSheet(
+      context: context,
+      title: 'Record Collection',
+      builder: (ctx, setModalState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            FarmNumberField(
+              label: 'Hens Active Today',
+              controller: hensActiveCtrl,
+              suffix: 'birds',
+            ),
+            const SizedBox(height: 12),
+            FarmNumberField(
+              label: 'Grade A (Large)',
+              controller: aCtrl,
+              suffix: 'eggs',
+            ),
+            FarmNumberField(
+              label: 'Grade B (Medium)',
+              controller: bCtrl,
+              suffix: 'eggs',
+            ),
+            FarmNumberField(
+              label: 'Grade C (Small)',
+              controller: cCtrl,
+              suffix: 'eggs',
+            ),
+            FarmNumberField(
+              label: 'Cracked / Reject',
+              controller: crackedCtrl,
+              suffix: 'eggs',
+            ),
+            const SizedBox(height: 8),
+            FarmPrimaryButton(
+              label: 'Save Collection',
+              colors: const [Color(0xFFE8A020), Color(0xFFC07010)],
+              onPressed: () async {
+                await context.read<FarmProvider>().addEggCollection(
+                  gradeA: int.tryParse(aCtrl.text) ?? 0,
+                  gradeB: int.tryParse(bCtrl.text) ?? 0,
+                  gradeC: int.tryParse(cCtrl.text) ?? 0,
+                  cracked: int.tryParse(crackedCtrl.text) ?? 0,
+                  hensActive: int.tryParse(hensActiveCtrl.text) ?? 0, // Sending the custom input!
+                );
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -207,9 +379,19 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isActive ? Colors.white.withValues(alpha: 0.7) : Colors.transparent,
+            color: isActive
+                ? Colors.white.withValues(alpha: 0.7)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: isActive ? [const BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2))] : [],
+            boxShadow: isActive
+                ? [
+                    const BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ]
+                : [],
           ),
           child: Center(
             child: Text(
@@ -217,7 +399,9 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: isActive ? const Color(0xFF2A2000) : const Color(0x733C320A),
+                color: isActive
+                    ? const Color(0xFF2A2000)
+                    : const Color(0x733C320A),
               ),
             ),
           ),
@@ -229,8 +413,18 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
   Widget _buildHeroStat(String value, String label) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
-        Text(label, style: const TextStyle(fontSize: 12, color: Color(0x803C320A))),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2A2000),
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Color(0x803C320A)),
+        ),
       ],
     );
   }
@@ -245,8 +439,17 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.28),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
-            boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 32, offset: Offset(0, 8))],
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.6),
+              width: 1.5,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 32,
+                offset: Offset(0, 8),
+              ),
+            ],
           ),
           child: child,
         ),

@@ -1,6 +1,9 @@
 import 'dart:ui';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/farm_provider.dart';
+import '../widgets/form_sheet.dart';
 
 class FeedTrackingScreen extends StatefulWidget {
   const FeedTrackingScreen({super.key});
@@ -10,27 +13,32 @@ class FeedTrackingScreen extends StatefulWidget {
 }
 
 class _FeedTrackingScreenState extends State<FeedTrackingScreen> {
-  int _activeDay = 3; // Defaults to Thursday
+  int _activeDay = 6; // index into the 7-day window returned by the provider; defaults to "today"
 
-  final List<String> days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  final List<int> consumption = [210, 225, 218, 240, 235, 200, 190];
-  
-  final List<Map<String, dynamic>> feedTypes = [
-    {'name': 'Starter Feed', 'kg': 80, 'color': const Color(0xFFE8A020), 'pct': 33},
-    {'name': 'Grower Feed', 'kg': 100, 'color': const Color(0xFF7A9A00), 'pct': 42},
-    {'name': 'Finisher Feed', 'kg': 60, 'color': const Color(0xFFC0860A), 'pct': 25},
-  ];
+  static const List<String> _dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   @override
   Widget build(BuildContext context) {
-    final int maxVal = consumption.reduce(max);
+    final farm = context.watch<FarmProvider>();
+
+    if (farm.isLoading) return const Center(child: CircularProgressIndicator());
+
+    final consumption = farm.last7DaysFeedTotals;
+    final maxVal = consumption.reduce(max).clamp(1, double.infinity);
+    final todayFeedKg = farm.todayFeedKg;
+    final breakdown = farm.feedTypeBreakdownToday; 
+    final feedColors = {
+      'Starter Feed': const Color(0xFFE8A020),
+      'Grower Feed': const Color(0xFF7A9A00),
+      'Finisher Feed': const Color(0xFFC0860A),
+    };
+    final breakdownTotal = breakdown.values.fold(0.0, (s, v) => s + v);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           const Padding(
             padding: EdgeInsets.only(top: 12, bottom: 20),
             child: Column(
@@ -41,8 +49,6 @@ class _FeedTrackingScreenState extends State<FeedTrackingScreen> {
               ],
             ),
           ),
-
-          // Today's Summary & Chart
           _buildGlassContainer(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -51,48 +57,41 @@ class _FeedTrackingScreenState extends State<FeedTrackingScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Today's Total", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0x803C320A))),
+                        const Text("Today's Total", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0x803C320A))),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            Text('240 ', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
-                            Text('kg', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Color(0xFF2A2000))),
+                            Text('${todayFeedKg.toStringAsFixed(0)} ', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
+                            const Text('kg', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Color(0xFF2A2000))),
                           ],
                         ),
                       ],
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0x337A9A00),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0x4D7A9A00)),
-                          ),
-                          child: const Text('+4.3% vs avg', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF5A7A00))),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text('3,600 birds', style: TextStyle(fontSize: 12, color: Color(0x733C320A))),
-                      ],
+                    Consumer<FarmProvider>(
+                      builder: (context, p, _) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('${p.flockInfo.flockSize} birds', style: const TextStyle(fontSize: 12, color: Color(0x733C320A))),
+                        ],
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 
-                // Interactive Bar Chart
+                // --- FIXED OVERFLOW LAYOUT HERE ---
                 SizedBox(
-                  height: 80,
+                  height: 120, // Increased height to prevent bottom overflow
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
-                    children: List.generate(days.length, (i) {
+                    children: List.generate(consumption.length, (i) {
                       final isActive = i == _activeDay;
-                      final height = (consumption[i] / maxVal) * 72;
+                      // Max height for the bar is 80, leaving 40 pixels for padding and text
+                      final height = maxVal == 0 ? 0.0 : (consumption[i] / maxVal) * 80; 
                       return Expanded(
                         child: GestureDetector(
                           onTap: () => setState(() => _activeDay = i),
@@ -102,19 +101,19 @@ class _FeedTrackingScreenState extends State<FeedTrackingScreen> {
                               AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
                                 width: double.infinity,
-                                height: height,
+                                height: height.toDouble(),
                                 margin: const EdgeInsets.symmetric(horizontal: 4),
                                 decoration: BoxDecoration(
                                   borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                                  gradient: isActive 
-                                    ? const LinearGradient(colors: [Color(0xFFE8A020), Color(0xFFC07010)], begin: Alignment.topCenter, end: Alignment.bottomCenter) 
-                                    : null,
+                                  gradient: isActive
+                                      ? const LinearGradient(colors: [Color(0xFFE8A020), Color(0xFFC07010)], begin: Alignment.topCenter, end: Alignment.bottomCenter)
+                                      : null,
                                   color: isActive ? null : const Color(0x40E8A020),
                                   border: isActive ? null : Border.all(color: const Color(0x33E8A020)),
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(days[i], style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isActive ? const Color(0xFFC07010) : const Color(0x663C320A))),
+                              Text(_dayLabels[i % 7], style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isActive ? const Color(0xFFC07010) : const Color(0x663C320A))),
                             ],
                           ),
                         ),
@@ -122,83 +121,114 @@ class _FeedTrackingScreenState extends State<FeedTrackingScreen> {
                     }),
                   ),
                 ),
+                // --- END FIXED LAYOUT ---
+
                 const SizedBox(height: 8),
                 Center(
-                  child: Text('${days[_activeDay]}: ${consumption[_activeDay]} kg', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFC07010))),
+                  child: Text('${_dayLabels[_activeDay % 7]}: ${consumption[_activeDay].toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFC07010))),
                 )
               ],
             ),
           ),
           const SizedBox(height: 16),
-
-          // Feed Types Breakdown
           const Text('FEED BREAKDOWN', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0x733C320A), letterSpacing: 1.2)),
           const SizedBox(height: 12),
           Column(
-            children: feedTypes.map((f) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _buildGlassContainer(
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(width: 12, height: 12, decoration: BoxDecoration(color: f['color'], shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text(f['name'], style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
-                          ],
-                        ),
-                        Text('${f['kg']} kg', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: f['color'])),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        value: f['pct'] / 100,
-                        backgroundColor: Colors.black.withValues(alpha: 0.08),
-                        valueColor: AlwaysStoppedAnimation<Color>(f['color']),
-                        minHeight: 6,
+            children: breakdown.entries.map((e) {
+              final pct = breakdownTotal == 0 ? 0.0 : e.value / breakdownTotal;
+              final color = feedColors[e.key] ?? Colors.grey;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildGlassContainer(
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                              const SizedBox(width: 8),
+                              Text(e.key, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))),
+                            ],
+                          ),
+                          Text('${e.value.toStringAsFixed(0)} kg', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text('${f['pct']}% of total', style: const TextStyle(fontSize: 12, color: Color(0x663C320A))),
-                    ),
-                  ],
-                ),
-              ),
-            )).toList(),
-          ),
-          const SizedBox(height: 16),
-
-          // Action Button
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFFE8A020), Color(0xFFC07010)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: const [BoxShadow(color: Color(0x66E8A020), blurRadius: 16, offset: Offset(0, 4))],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () {},
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(
-                    child: Text('+ Log Feed Entry', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: pct,
+                          backgroundColor: Colors.black.withValues(alpha: 0.08),
+                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                          minHeight: 6,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text('${(pct * 100).toStringAsFixed(0)}% of total', style: const TextStyle(fontSize: 12, color: Color(0x663C320A))),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+          FarmPrimaryButton(
+            label: '+ Log Feed Entry',
+            colors: const [Color(0xFFE8A020), Color(0xFFC07010)],
+            onPressed: () => _openLogFeedSheet(context),
           ),
         ],
       ),
+    );
+  }
+
+  void _openLogFeedSheet(BuildContext context) {
+    String feedType = 'Starter Feed';
+    final kgController = TextEditingController();
+
+    showFarmFormSheet(
+      context: context,
+      title: 'Log Feed Entry',
+      builder: (ctx, setModalState) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: feedType,
+              decoration: InputDecoration(
+                labelText: 'Feed type',
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.04),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'Starter Feed', child: Text('Starter Feed')),
+                DropdownMenuItem(value: 'Grower Feed', child: Text('Grower Feed')),
+                DropdownMenuItem(value: 'Finisher Feed', child: Text('Finisher Feed')),
+              ],
+              onChanged: (v) => setModalState(() => feedType = v ?? feedType),
+            ),
+            const SizedBox(height: 12),
+            FarmNumberField(label: 'Amount', controller: kgController, suffix: 'kg'),
+            const SizedBox(height: 8),
+            FarmPrimaryButton(
+              label: 'Save Entry',
+              colors: const [Color(0xFFE8A020), Color(0xFFC07010)],
+              onPressed: () async {
+                final kg = double.tryParse(kgController.text);
+                if (kg == null || kg <= 0) return;
+                await context.read<FarmProvider>().addFeedEntry(feedType: feedType, kg: kg);
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 

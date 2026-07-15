@@ -1,7 +1,10 @@
+import 'dart:ui'; // Required for the glass blur effect
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-// 1. IMPORT ADDED: This connects your splash screen to your main dashboard shell
-import '../../main.dart'; 
+// This connects your splash screen to your main dashboard shell
+import '../../main.dart';
+import '../../screens/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -24,100 +27,155 @@ class _SplashScreenState extends State<SplashScreen> {
   void _startLoadingAnimation() async {
     // Transition to Frame 2 (Width: 77.5)
     await Future.delayed(const Duration(milliseconds: 1000));
-    if (mounted) {
-      setState(() {
-        _loadingWidth = 77.50;
-      });
-    }
+    if (mounted) setState(() => _loadingWidth = 77.50);
 
     // Transition to Frame 3 (Width: 155.0)
     await Future.delayed(const Duration(milliseconds: 1000));
-    if (mounted) {
-      setState(() {
-        _loadingWidth = 155.0;
-      });
-    }
+    if (mounted) setState(() => _loadingWidth = 155.0);
 
     // Transition to Frame 4 (Width: 232.0)
     await Future.delayed(const Duration(milliseconds: 1000));
-    if (mounted) {
-      setState(() {
-        _loadingWidth = 232.0;
-      });
-    }
+    if (mounted) setState(() => _loadingWidth = 232.0);
 
     // Transition to Frame 5 (Width: 310.0)
     await Future.delayed(const Duration(milliseconds: 1000));
-    if (mounted) {
-      setState(() {
-        _loadingWidth = 310.0;
-      });
-    }
-    
-    // 2. NAVIGATION ADDED: Wait 0.5 seconds after filling, then go to the dashboard
+    if (mounted) setState(() => _loadingWidth = 310.0);
+
+    // NAVIGATION: Wait 0.5 seconds after filling, then check auth state
     await Future.delayed(const Duration(milliseconds: 500));
+
     if (mounted) {
-      Navigator.pushReplacement(
-        context, 
-        MaterialPageRoute(builder: (context) => const MainNavigationShell()),
-      );
+      // Check if a user is currently logged into Firebase
+      User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        // User IS logged in, go straight to the Dashboard
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MainNavigationShell()),
+        );
+      } else {
+        // User IS NOT logged in, go to the Login Screen
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xC1F4F0AA),
+      backgroundColor: const Color(0xFFF4F0AA),
       // Center ensures the 402x874 design stays perfectly centered on any device screen size
       body: Center(
         child: Container(
           width: 402,
           height: 874,
           clipBehavior: Clip.antiAlias,
-          decoration: const BoxDecoration(color: Color(0xC1F4F0AA)),
+          // 1. The beautiful React gradient background
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              stops: [0.0, 0.6, 1.0],
+              colors: [
+                Color(0xFFF4F0AA),
+                Color(0xFFE8F5C0),
+                Color(0xFFD8EDB0)
+              ],
+            ),
+          ),
           child: Stack(
             children: [
-              // 1. The Logo Background Container with Shadow
+              // 3. Center Content: Glow Blob, Glass Card, and Typography
               Positioned(
-                left: 141,
-                top: 379.14,
-                child: Container(
-                  width: 120,
-                  height: 115.71,
-                  decoration: ShapeDecoration(
-                    color: const Color(0xFFF4F0AA),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                top: 240,
+                left: 0,
+                right: 0,
+                child: Column(
+                  children: [
+                    // Stack for Blob and Logo Card
+                    SizedBox(
+                      width: 220,
+                      height: 220,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // The Yellow Glow Blob
+                          Container(
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [Color(0x59FFDC28), Colors.transparent], // 35% opacity yellow
+                                stops: [0.0, 0.7],
+                              ),
+                            ),
+                          ),
+                          // The Liquid Glass Card
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(32),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                              child: Container(
+                                width: 130,
+                                height: 130,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.35),
+                                  borderRadius: BorderRadius.circular(32),
+                                  border: Border.all(color: Colors.white.withOpacity(0.7), width: 1.5),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x1F000000), // 12% black
+                                      blurRadius: 40,
+                                      offset: Offset(0, 12),
+                                    )
+                                  ],
+                                ),
+                                child: Center(
+                                  // Your Rooster Asset
+                                  child: Image.asset(
+                                    "assets/images/splash1.png",
+                                    width: 117, // 90% of card size
+                                    height: 117,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    shadows: const [
-                      BoxShadow(
-                        color: Color(0x3F000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 8),
-                        spreadRadius: 0,
-                      )
-                    ],
-                  ),
+                    const SizedBox(height: 24),
+
+                    // App Name with mixed colors
+                    RichText(
+                      text: const TextSpan(
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                          fontFamily: 'Segoe UI', // Clean sans-serif fallback
+                        ),
+                        children: [
+                          TextSpan(text: 'Poultry ', style: TextStyle(color: Color(0xFF3A3000))),
+                          TextSpan(text: 'Pro', style: TextStyle(color: Color(0xFF7A9A00))),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Subtitle
+                    const Text(
+                      'Smart Farm Management',
+                      style: TextStyle(fontSize: 14, color: Color(0x993C320A)), // 60% opacity dark brown
+                    ),
+                  ],
                 ),
               ),
 
-              // 2. Your Splash Image Asset (splash1.png)
-              Positioned(
-                left: 142,
-                top: 378,
-                child: Container(
-                  width: 118,
-                  height: 118,
-                  decoration: const BoxDecoration(
-                    image: DecorationImage(
-                      image: AssetImage("assets/images/splash1.png"),
-                      fit: BoxFit.fill,
-                    ),
-                  ),
-                ),
-              ),
-
-              // 3. The Animated Gradient Loading Bar
+              // 4. Your Functional Animated Loading Bar
               Positioned(
                 left: 46,
                 top: 615,
@@ -131,7 +189,7 @@ class _SplashScreenState extends State<SplashScreen> {
                       begin: Alignment(-0.00, 1.00),
                       end: Alignment(1.00, 1.00),
                       colors: [
-                        Color(0xFFFF0000), 
+                        Color(0xFFFF0000),
                         Color(0xFFFF8D28) // Accents-Orange
                       ],
                     ),
@@ -151,4 +209,4 @@ class _SplashScreenState extends State<SplashScreen> {
       ),
     );
   }
-} 
+}
