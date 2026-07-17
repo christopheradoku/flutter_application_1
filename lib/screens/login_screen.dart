@@ -33,8 +33,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // --- EMAIL & PASSWORD AUTH ---
   Future<void> _submitEmailAuth() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty)
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       return;
+    }
     setState(() => _isLoading = true);
 
     try {
@@ -46,22 +47,21 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else {
         // 1. Create a brand new user in Firebase Auth
-        final userCredential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(
-              email: _emailController.text.trim(),
-              password: _passwordController.text.trim(),
-            );
+        final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
 
         // 2. Save their custom farm details to Firestore under their unique UID!
         await FirebaseFirestore.instance
             .collection('users')
             .doc(userCredential.user!.uid)
             .set({
-              'name': _nameController.text.trim(),
-              'farmName': _farmNameController.text.trim(),
-              'email': _emailController.text.trim(),
-              'createdAt': FieldValue.serverTimestamp(),
-            });
+          'name': _nameController.text.trim(),
+          'farmName': _farmNameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
       _navigateToDashboard();
     } on FirebaseAuthException catch (e) {
@@ -71,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- GOOGLE AUTH ---
+  // --- GOOGLE AUTH (VERSION 7 UPDATED) ---
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
@@ -79,45 +79,45 @@ class _LoginScreenState extends State<LoginScreen> {
         GoogleAuthProvider authProvider = GoogleAuthProvider();
         await FirebaseAuth.instance.signInWithPopup(authProvider);
       } else {
-        // Spelled Google correctly!
-        final googleSignIn = GoogleSignIn(scopes: ['email']);
-        final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+        // 1. Get the singleton instance and initialize it
+        final googleSignIn = GoogleSignIn.instance;
+        await googleSignIn.initialize();
+
+        // 2. Authenticate the user (triggers the system sheet)
+        final GoogleSignInAccount googleUser = await googleSignIn.authenticate();
         
-        if (googleUser == null) {
-          setState(() => _isLoading = false);
-          return;
-        }
-        
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        // 3. Request the 'email' scope to explicitly get the Access Token
+        final clientAuth = await googleUser.authorizationClient.authorizeScopes(['email']);
+
+        // 4. Create the Firebase Credential linking everything together
         final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken, 
-          idToken: googleAuth.idToken
+          accessToken: clientAuth.accessToken, 
+          idToken: googleUser.authentication.idToken,
         );
+        
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
 
       // Ensure Google users also get a Firestore profile if it's their first time
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         if (!doc.exists) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .set({
-                'name': user.displayName ?? 'Google Farmer',
-                'farmName': 'My Poultry Farm',
-                'email': user.email ?? '',
-                'createdAt': FieldValue.serverTimestamp(),
-              });
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'name': user.displayName ?? 'Google Farmer',
+            'farmName': 'My Poultry Farm',
+            'email': user.email ?? '',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
         }
       }
 
       _navigateToDashboard();
     } catch (e) {
+      // If the user just clicked "cancel" on the popup, we don't need to show an ugly red error
+      if (e is GoogleSignInException && (e.code == 'canceled' || e.code == 'sign_in_canceled')) {
+        return;
+      }
       _showError('Google Sign-In failed: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -165,7 +165,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      // FIX 2: Switched to .withOpacity() for maximum version compatibility
                       color: Colors.white.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(32),
                       border: Border.all(
