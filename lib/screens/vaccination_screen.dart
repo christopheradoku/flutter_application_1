@@ -227,7 +227,7 @@ class _VaccinationScreenState extends State<VaccinationScreen> {
                   SwitchListTile(
                     title: const Text('Already Administered?', style: TextStyle(fontSize: 14)),
                     value: isAdministered,
-                    activeColor: const Color(0xFF4A9FD4),
+                    activeThumbColor: const Color(0xFF4A9FD4),
                     onChanged: (v) => setModalState(() => isAdministered = v),
                   ),
                   ListTile(

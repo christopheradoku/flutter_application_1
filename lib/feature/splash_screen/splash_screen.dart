@@ -121,9 +121,9 @@ class _SplashScreenState extends State<SplashScreen> {
                                 width: 130,
                                 height: 130,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.35),
+                                  color: Colors.white.withValues(alpha: 0.35),
                                   borderRadius: BorderRadius.circular(32),
-                                  border: Border.all(color: Colors.white.withOpacity(0.7), width: 1.5),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.7), width: 1.5),
                                   boxShadow: const [
                                     BoxShadow(
                                       color: Color(0x1F000000), // 12% black

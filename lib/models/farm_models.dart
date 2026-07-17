@@ -1,6 +1,7 @@
 /// Core domain models for the poultry farm app.
 /// These replace the ad-hoc Map<String, dynamic> lists that were hardcoded
 /// directly into the screen widgets.
+library;
 
 class FlockInfo {
   final int flockSize;

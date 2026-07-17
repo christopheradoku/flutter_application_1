@@ -7,7 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/farm_provider.dart';
 import 'login_screen.dart'; 
-import '../services/notification_service.dart'; // Imports your new service
+import 'settings_screen.dart'; // <-- IMPORT THE NEW SCREEN
+import '../services/notification_service.dart'; 
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -22,19 +23,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    // Ask the phone for notification permissions on load
     NotificationService.requestPermissions();
-    // Start the alarms (if they aren't already running)
     NotificationService.scheduleDailyReminders();
-    // Check if the user already read the message today
     _checkIfAlertWasReadToday();
   }
 
   Future<void> _checkIfAlertWasReadToday() async {
     final prefs = await SharedPreferences.getInstance();
     final lastReadDate = prefs.getString('lastAlertReadDate');
-    final today = DateTime.now().toIso8601String().substring(0, 10); // Gets YYYY-MM-DD
-    
+    final today = DateTime.now().toIso8601String().substring(0, 10); 
     if (lastReadDate == today) {
       if (mounted) setState(() => _isAlertRead = true);
     }
@@ -43,14 +40,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _markAlertAsRead() async {
     final prefs = await SharedPreferences.getInstance();
     final today = DateTime.now().toIso8601String().substring(0, 10);
-    
-    // Saves today's date in local memory
     await prefs.setString('lastAlertReadDate', today);
-    
-    // Updates UI to remove the red badge instantly
     if (mounted) setState(() => _isAlertRead = true);
-
-    // Stops the phone from sending any more notifications for today!
     await NotificationService.cancelAndRescheduleForTomorrow();
   }
 
@@ -135,9 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               final newFlock = int.tryParse(flockCtrl.text) ?? currentFlock;
               final newBatches = int.tryParse(batchesCtrl.text) ?? currentBatches;
-              
               await context.read<FarmProvider>().updateFlock(newFlock, newBatches);
-              
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Update', style: TextStyle(color: Colors.white)),
@@ -168,7 +157,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: cause,
+                initialValue: cause,
                 decoration: const InputDecoration(labelText: 'Cause of death', border: OutlineInputBorder()),
                 items: causes.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                 onChanged: (v) => setState(() => cause = v ?? cause),
@@ -198,14 +187,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showAlertsPanel(BuildContext context) {
-    // TRIGGER THE READ EVENT!
     _markAlertAsRead();
-
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(24),
@@ -231,6 +216,98 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       },
+    );
+  }
+
+  /// --- THE SOLID TINTED GLASS SIDE DRAWER ---
+  Widget _buildProfileDrawer(User? user, String farmName) {
+    return Drawer(
+      backgroundColor: Colors.transparent, 
+      elevation: 0,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(32)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF7A9A00).withValues(alpha: 0.85), 
+              border: Border(
+                right: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1.0),
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  const SizedBox(height: 32),
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.white.withValues(alpha: 0.2), 
+                    backgroundImage: user?.photoURL != null ? NetworkImage(user!.photoURL!) : null,
+                    child: user?.photoURL == null ? const Icon(Icons.person, size: 50, color: Colors.white) : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    user?.displayName?.toUpperCase() ?? 'FARMER',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.2),
+                  ),
+                  Text(
+                    user?.email ?? '',
+                    style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.8)),
+                  ),
+                  const SizedBox(height: 32),
+                  Divider(color: Colors.white.withValues(alpha: 0.2), thickness: 1, indent: 24, endIndent: 24),
+                  
+                  ListTile(
+                    leading: const Icon(Icons.person_outline, color: Colors.white),
+                    title: const Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                    trailing: Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white.withValues(alpha: 0.6)),
+                    onTap: () {
+                      Navigator.pop(context); 
+                      _showEditProfileDialog(context, farmName);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.settings_outlined, color: Colors.white),
+                    title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                    trailing: Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white.withValues(alpha: 0.6)),
+                    onTap: () {
+                      Navigator.pop(context); 
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
+                    },
+                  ),
+                  
+                  const Spacer(),
+                  
+                  Divider(color: Colors.white.withValues(alpha: 0.2), thickness: 1, indent: 24, endIndent: 24),
+                  
+                  // ===== UPDATED LOGOUT BUTTON WITH BIOMETRICS FIX =====
+                  ListTile(
+                    leading: const Icon(Icons.logout, color: Color(0xFFFF8A80)), 
+                    title: const Text('Log Out', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFF8A80))),
+                    onTap: () async {
+                      // --- FIX: Force biometrics OFF when logging out ---
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('biometric_login', false);
+
+                      context.read<FarmProvider>().clearData();
+                      await FirebaseAuth.instance.signOut();
+                      if (context.mounted) {
+                        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          (route) => false,
+                        );
+                      }
+                    },
+                  ),
+                  // ===================================================
+                  
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -288,180 +365,158 @@ class _DashboardScreenState extends State<DashboardScreen> {
       },
     ];
 
-    return RefreshIndicator(
-      onRefresh: farm.loadAll,
-      color: const Color(0xFF7A9A00),
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_getGreeting(), style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600)),
-                    
-                    StreamBuilder<DocumentSnapshot>(
-                      stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
-                      builder: (context, snapshot) {
-                        String farmName = 'Farm Dashboard';
-                        if (snapshot.hasData && snapshot.data!.exists) {
-                          final data = snapshot.data!.data() as Map<String, dynamic>?;
-                          if (data != null && data.containsKey('farmName')) {
-                            farmName = data['farmName'] ?? 'Farm Dashboard';
-                          }
-                        }
-                        return Text(
-                          farmName, 
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                
-                GestureDetector(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        title: const Text('Farmer Profile'),
-                        content: Text('Logged in as:\n${user?.email ?? 'Unknown User'}'),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context); 
-                              FirebaseFirestore.instance.collection('users').doc(user?.uid).get().then((doc) {
-                                String currentName = '';
-                                if (doc.exists && doc.data() != null) {
-                                  final data = doc.data() as Map<String, dynamic>;
-                                  if (data.containsKey('farmName')) {
-                                    currentName = data['farmName'] ?? '';
-                                  }
-                                }
-                                _showEditProfileDialog(context, currentName);
-                              });
-                            },
-                            child: const Text('Edit Profile', style: TextStyle(color: Color(0xFF7A9A00))),
-                          ),
-                          TextButton(
-                            onPressed: () async {
-                              context.read<FarmProvider>().clearData();
-                              await FirebaseAuth.instance.signOut();
-                              
-                              if (context.mounted) {
-                                Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-                                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                                  (route) => false,
-                                );
-                              }
-                            },
-                            child: const Text('Sign Out', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  child: CircleAvatar(
-                    radius: 24,
-                    backgroundColor: Colors.white60,
-                    backgroundImage: user?.photoURL != null ? NetworkImage(user!.photoURL!) : null,
-                    child: user?.photoURL == null ? const Icon(Icons.person, color: Colors.black54) : null,
-                  ),
-                )
-              ],
-            ),
-            
-            const SizedBox(height: 24),
-            
-            _buildGlassContainer(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      
+      drawer: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
+        builder: (context, snapshot) {
+          String farmName = 'Farm Dashboard';
+          if (snapshot.hasData && snapshot.data!.exists) {
+            final data = snapshot.data!.data() as Map<String, dynamic>?;
+            if (data != null && data.containsKey('farmName')) {
+              farmName = data['farmName'] ?? 'Farm Dashboard';
+            }
+          }
+          return _buildProfileDrawer(user, farmName);
+        },
+      ),
+
+      body: RefreshIndicator(
+        onRefresh: farm.loadAll,
+        color: const Color(0xFF7A9A00),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showEditFlockDialog(context, farm.flockInfo.flockSize, farm.flockInfo.batches),
-                    child: _buildStatColumn('Flock', farm.flockInfo.flockSize.toString()),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_getGreeting(), style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600)),
+                      
+                      StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
+                        builder: (context, snapshot) {
+                          String farmName = 'Farm Dashboard';
+                          if (snapshot.hasData && snapshot.data!.exists) {
+                            final data = snapshot.data!.data() as Map<String, dynamic>?;
+                            if (data != null && data.containsKey('farmName')) {
+                              farmName = data['farmName'] ?? 'Farm Dashboard';
+                            }
+                          }
+                          return Text(
+                            farmName, 
+                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2A2000))
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showEditFlockDialog(context, farm.flockInfo.flockSize, farm.flockInfo.batches),
-                    child: _buildStatColumn('Batches', farm.flockInfo.batches.toString()),
-                  ),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showLogMortalityDialog(context),
-                    child: _buildStatColumn('Deaths', farm.totalMortalityThisWeek.toString(), color: const Color(0xFFE05050)),
-                  ),
-                  // Send 0 to the badge if read today, otherwise send 1
-                  _buildAlertBadge(context, _isAlertRead ? 0 : 1), 
+                  
+                  Builder(
+                    builder: (context) => GestureDetector(
+                      onTap: () => Scaffold.of(context).openDrawer(),
+                      child: CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Colors.white60,
+                        backgroundImage: user?.photoURL != null ? NetworkImage(user!.photoURL!) : null,
+                        child: user?.photoURL == null ? const Icon(Icons.person, color: Colors.black54) : null,
+                      ),
+                    ),
+                  )
                 ],
               ),
-            ),
-            
-            const SizedBox(height: 24),
-            const Text('QUICK OVERVIEW', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black45, letterSpacing: 1.2)),
-            const SizedBox(height: 12),
-            
-            ...dashboardStats.map((stat) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
-                  child: _buildGlassContainer(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: (stat['color'] as Color).withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(stat['icon'] as IconData, color: stat['color'] as Color),
-                                ),
-                                const SizedBox(width: 16),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(stat['label'] as String, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                                    Text(stat['value'] as String, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: (stat['badgeColor'] as Color).withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: (stat['badgeColor'] as Color).withOpacity(0.5)),
-                              ),
-                              child: Text(stat['badge'] as String, style: TextStyle(color: stat['badgeColor'] as Color, fontSize: 12, fontWeight: FontWeight.bold)),
-                            )
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(stat['sub'] as String, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                        const SizedBox(height: 8),
-                        LinearProgressIndicator(
-                          value: stat['progress'] as double,
-                          backgroundColor: Colors.black12,
-                          valueColor: AlwaysStoppedAnimation<Color>(stat['color'] as Color),
-                          borderRadius: BorderRadius.circular(4),
-                        )
-                      ],
+              
+              const SizedBox(height: 24),
+              
+              _buildGlassContainer(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _showEditFlockDialog(context, farm.flockInfo.flockSize, farm.flockInfo.batches),
+                      child: _buildStatColumn('Flock', farm.flockInfo.flockSize.toString()),
                     ),
-                  ),
-                )).toList(),
-          ],
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _showEditFlockDialog(context, farm.flockInfo.flockSize, farm.flockInfo.batches),
+                      child: _buildStatColumn('Batches', farm.flockInfo.batches.toString()),
+                    ),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _showLogMortalityDialog(context),
+                      child: _buildStatColumn('Deaths', farm.totalMortalityThisWeek.toString(), color: const Color(0xFFE05050)),
+                    ),
+                    _buildAlertBadge(context, _isAlertRead ? 0 : 1), 
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 24),
+              const Text('QUICK OVERVIEW', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black45, letterSpacing: 1.2)),
+              const SizedBox(height: 12),
+              
+              ...dashboardStats.map((stat) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: _buildGlassContainer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: (stat['color'] as Color).withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(stat['icon'] as IconData, color: stat['color'] as Color),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(stat['label'] as String, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                      Text(stat['value'] as String, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: (stat['badgeColor'] as Color).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: (stat['badgeColor'] as Color).withValues(alpha: 0.5)),
+                                ),
+                                child: Text(stat['badge'] as String, style: TextStyle(color: stat['badgeColor'] as Color, fontSize: 12, fontWeight: FontWeight.bold)),
+                              )
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(stat['sub'] as String, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: stat['progress'] as double,
+                            backgroundColor: Colors.black12,
+                            valueColor: AlwaysStoppedAnimation<Color>(stat['color'] as Color),
+                            borderRadius: BorderRadius.circular(4),
+                          )
+                        ],
+                      ),
+                    ),
+                  )),
+            ],
+          ),
         ),
       ),
     );
@@ -506,7 +561,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          const Text('Alerts', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+          const Text('Alerts', style: TextStyle(fontSize: 12, color: Colors.black54)),
         ],
       ),
     );
@@ -520,9 +575,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.28),
+            color: Colors.white.withValues(alpha: 0.28),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.5),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
           ),
           child: child,
         ),

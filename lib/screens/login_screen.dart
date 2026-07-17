@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import '../../main.dart'; 
+import '../../main.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,7 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _farmNameController = TextEditingController();
-  
+
   bool _isLoading = false;
   bool _isLogin = true; // Toggles between Sign In and Sign Up
 
@@ -33,9 +33,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // --- EMAIL & PASSWORD AUTH ---
   Future<void> _submitEmailAuth() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) return;
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty)
+      return;
     setState(() => _isLoading = true);
-    
+
     try {
       if (_isLogin) {
         // Log in existing user
@@ -45,18 +46,22 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else {
         // 1. Create a brand new user in Firebase Auth
-        final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        
+        final userCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
+              email: _emailController.text.trim(),
+              password: _passwordController.text.trim(),
+            );
+
         // 2. Save their custom farm details to Firestore under their unique UID!
-        await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
-          'name': _nameController.text.trim(),
-          'farmName': _farmNameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set({
+              'name': _nameController.text.trim(),
+              'farmName': _farmNameController.text.trim(),
+              'email': _emailController.text.trim(),
+              'createdAt': FieldValue.serverTimestamp(),
+            });
       }
       _navigateToDashboard();
     } on FirebaseAuthException catch (e) {
@@ -74,31 +79,43 @@ class _LoginScreenState extends State<LoginScreen> {
         GoogleAuthProvider authProvider = GoogleAuthProvider();
         await FirebaseAuth.instance.signInWithPopup(authProvider);
       } else {
-        await GoogleSignIn.instance.initialize();
-        final GoogleSignInAccount? googleUser = await GoogleSignIn.instance.authenticate();
+        // Spelled Google correctly!
+        final googleSignIn = GoogleSignIn(scopes: ['email']);
+        final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+        
         if (googleUser == null) {
           setState(() => _isLoading = false);
           return;
         }
+        
         final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(idToken: googleAuth.idToken);
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken, 
+          idToken: googleAuth.idToken
+        );
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
-      
+
       // Ensure Google users also get a Firestore profile if it's their first time
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
         if (!doc.exists) {
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-            'name': user.displayName ?? 'Google Farmer',
-            'farmName': 'My Poultry Farm',
-            'email': user.email ?? '',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({
+                'name': user.displayName ?? 'Google Farmer',
+                'farmName': 'My Poultry Farm',
+                'email': user.email ?? '',
+                'createdAt': FieldValue.serverTimestamp(),
+              });
         }
       }
-      
+
       _navigateToDashboard();
     } catch (e) {
       _showError('Google Sign-In failed: $e');
@@ -118,7 +135,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showError(String message) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -129,7 +148,9 @@ class _LoginScreenState extends State<LoginScreen> {
         width: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight, stops: [0.0, 0.6, 1.0],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: [0.0, 0.6, 1.0],
             colors: [Color(0xFFF4F0AA), Color(0xFFE8F5C0), Color(0xFFD8EDB0)],
           ),
         ),
@@ -144,9 +165,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
+                      // FIX 2: Switched to .withOpacity() for maximum version compatibility
                       color: Colors.white.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: Colors.white.withOpacity(0.7), width: 1.5),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.7),
+                        width: 1.5,
+                      ),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -155,73 +180,138 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                         Text(
                           _isLogin ? 'Welcome Back' : 'Create Farm Account',
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2A2000)),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2A2000),
+                          ),
                         ),
                         const SizedBox(height: 24),
-                        
+
                         // Show Name & Farm Name ONLY during Sign Up
                         if (!_isLogin) ...[
                           TextField(
                             controller: _nameController,
-                            decoration: InputDecoration(labelText: 'Your Full Name', filled: true, fillColor: Colors.white70, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                            decoration: InputDecoration(
+                              labelText: 'Your Full Name',
+                              filled: true,
+                              fillColor: Colors.white70,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 12),
                           TextField(
                             controller: _farmNameController,
-                            decoration: InputDecoration(labelText: 'Farm Name', filled: true, fillColor: Colors.white70, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                            decoration: InputDecoration(
+                              labelText: 'Farm Name',
+                              filled: true,
+                              fillColor: Colors.white70,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 12),
                         ],
-                        
+
                         TextField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(labelText: 'Email Address', filled: true, fillColor: Colors.white70, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                          decoration: InputDecoration(
+                            labelText: 'Email Address',
+                            filled: true,
+                            fillColor: Colors.white70,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 12),
-                        
+
                         TextField(
                           controller: _passwordController,
                           obscureText: true,
-                          decoration: InputDecoration(labelText: 'Password', filled: true, fillColor: Colors.white70, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            filled: true,
+                            fillColor: Colors.white70,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 24),
 
-                        _isLoading 
-                          ? const CircularProgressIndicator(color: Color(0xFF7A9A00))
-                          : SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _submitEmailAuth,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF7A9A00), foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        _isLoading
+                            ? const CircularProgressIndicator(
+                                color: Color(0xFF7A9A00),
+                              )
+                            : SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: _submitEmailAuth,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF7A9A00),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _isLogin ? 'Sign In' : 'Sign Up',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
-                                child: Text(_isLogin ? 'Sign In' : 'Sign Up', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                               ),
-                            ),
-                        
+
                         TextButton(
                           onPressed: () => setState(() => _isLogin = !_isLogin),
-                          child: Text(_isLogin ? 'Need an account? Sign Up' : 'Already have an account? Sign In', style: const TextStyle(color: Color(0xFF526A00))),
+                          child: Text(
+                            _isLogin
+                                ? 'Need an account? Sign Up'
+                                : 'Already have an account? Sign In',
+                            style: const TextStyle(color: Color(0xFF526A00)),
+                          ),
                         ),
                         const Divider(height: 32, color: Colors.black26),
 
                         ElevatedButton(
                           onPressed: _isLoading ? null : _signInWithGoogle,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white, foregroundColor: Colors.black87,
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black87,
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // The official Google Logo fetched from the web
-                              Image.network('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/120px-Google_%22G%22_logo.svg.png', height: 24),
+                              Image.network(
+                                'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/120px-Google_%22G%22_logo.svg.png',
+                                height: 24,
+                              ),
                               const SizedBox(width: 12),
-                              const Text('Continue with Google', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                              const Text(
+                                'Continue with Google',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ],
                           ),
                         ),
