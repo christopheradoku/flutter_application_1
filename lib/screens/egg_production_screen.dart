@@ -15,15 +15,23 @@ class EggProductionScreen extends StatefulWidget {
 
 class _EggProductionScreenState extends State<EggProductionScreen> {
   String _selectedTab = 'daily';
-  static const List<String> _dayLabels = [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
-  ];
+  
+  // --- Dynamic Date Calculator ---
+  String _getDynamicDayName(int index) {
+    if (index < 0 || index > 6) return '';
+    final today = DateTime.now();
+    final dateOfColumn = today.subtract(Duration(days: 6 - index));
+    switch (dateOfColumn.weekday) {
+      case 1: return 'Mon';
+      case 2: return 'Tue';
+      case 3: return 'Wed';
+      case 4: return 'Thu';
+      case 5: return 'Fri';
+      case 6: return 'Sat';
+      case 7: return 'Sun';
+      default: return '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +57,26 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
       'Cracked/Reject': const Color(0x4D3C320A),
     };
     final weekEggTotal = weekTotals.fold(0, (a, b) => a + b).clamp(1, 1 << 30);
+
+    // --- NEW: Safe Lay Rate Calculation ---
+    String layRateText = '—';
+    if (today.hensActive > 0) {
+      layRateText = '${(today.total / today.hensActive * 100).clamp(0, 100).toStringAsFixed(0)}%';
+    }
+
+    // --- NEW: Safe 'vs Yesterday' Calculation (Fixes the Infinity% bug) ---
+    String vsYesterdayText = '—';
+    if (weekTotals.length > 1) {
+      int todayEggs = weekTotals.last;
+      int yesterdayEggs = weekTotals[weekTotals.length - 2];
+      if (yesterdayEggs == 0) {
+        vsYesterdayText = todayEggs > 0 ? '+100%' : '0%';
+      } else {
+        double pct = ((todayEggs - yesterdayEggs) / yesterdayEggs) * 100;
+        // Adds a '+' sign if the percentage is positive
+        vsYesterdayText = '${pct > 0 ? '+' : ''}${pct.toStringAsFixed(1)}%';
+      }
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
@@ -101,36 +129,20 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
                   style: TextStyle(fontSize: 14, color: Color(0xFFC0860A)),
                 ),
                 const SizedBox(height: 16),
+                
+                // --- FIXED RESPONSIVE ROW LAYOUT ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildHeroStat(
-                      today.hensActive == 0
-                          ? '—'
-                          : '${(today.total / today.hensActive * 100).clamp(0, 100).toStringAsFixed(0)}%',
-                      'Lay Rate',
-                    ),
-                    Container(
-                      width: 1,
-                      height: 30,
-                      color: Colors.black12,
-                      margin: const EdgeInsets.symmetric(horizontal: 24),
-                    ),
-                    _buildHeroStat(
-                      weekTotals.length > 1
-                          ? '${(((weekTotals.last - weekTotals[weekTotals.length - 2]) / weekTotals[weekTotals.length - 2]) * 100).toStringAsFixed(1)}%'
-                          : '—',
-                      'vs Yesterday',
-                    ),
-                    Container(
-                      width: 1,
-                      height: 30,
-                      color: Colors.black12,
-                      margin: const EdgeInsets.symmetric(horizontal: 24),
-                    ),
+                    _buildHeroStat(layRateText, 'Lay Rate'),
+                    Container(width: 1, height: 30, color: Colors.black12),
+                    _buildHeroStat(vsYesterdayText, 'vs Yesterday'),
+                    Container(width: 1, height: 30, color: Colors.black12),
                     _buildHeroStat('${today.hensActive}', 'Hens Active'),
                   ],
                 ),
+                // --- END FIXED ROW ---
+                
               ],
             ),
           ),
@@ -163,14 +175,12 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // --- FIXED OVERFLOW LAYOUT HERE ---
                   SizedBox(
-                    height: 120, // Increased height to prevent overflow
+                    height: 120, 
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: List.generate(weekTotals.length, (index) {
                         final val = weekTotals[index];
-                        // Max height for the bar is 80, leaving safe padding for the text
                         final height = maxEggs == 0 ? 0.0 : (val / maxEggs) * 80;
                         final isToday = index == weekTotals.length - 1;
                         return Expanded(
@@ -204,7 +214,7 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _dayLabels[index % 7],
+                                _getDynamicDayName(index),
                                 style: const TextStyle(
                                   fontSize: 9,
                                   color: Color(0x663C320A),
@@ -216,7 +226,6 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
                       }),
                     ),
                   ),
-                  // --- END FIXED LAYOUT ---
                 ],
               ),
             ),
@@ -359,7 +368,7 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
                   gradeB: int.tryParse(bCtrl.text) ?? 0,
                   gradeC: int.tryParse(cCtrl.text) ?? 0,
                   cracked: int.tryParse(crackedCtrl.text) ?? 0,
-                  hensActive: int.tryParse(hensActiveCtrl.text) ?? 0, // Sending the custom input!
+                  hensActive: int.tryParse(hensActiveCtrl.text) ?? 0, 
                 );
                 if (ctx.mounted) Navigator.of(ctx).pop();
               },
@@ -410,22 +419,35 @@ class _EggProductionScreenState extends State<EggProductionScreen> {
     );
   }
 
+  // --- FIXED HERO STAT WITH EXPANDED & FITTED BOX ---
   Widget _buildHeroStat(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF2A2000),
-          ),
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+        child: Column(
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2A2000),
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 12, color: Color(0x803C320A)),
+              ),
+            ),
+          ],
         ),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: Color(0x803C320A)),
-        ),
-      ],
+      ),
     );
   }
 

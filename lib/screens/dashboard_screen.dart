@@ -3,12 +3,56 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart'; 
 
 import '../providers/farm_provider.dart';
 import 'login_screen.dart'; 
+import '../services/notification_service.dart'; // Imports your new service
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isAlertRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ask the phone for notification permissions on load
+    NotificationService.requestPermissions();
+    // Start the alarms (if they aren't already running)
+    NotificationService.scheduleDailyReminders();
+    // Check if the user already read the message today
+    _checkIfAlertWasReadToday();
+  }
+
+  Future<void> _checkIfAlertWasReadToday() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastReadDate = prefs.getString('lastAlertReadDate');
+    final today = DateTime.now().toIso8601String().substring(0, 10); // Gets YYYY-MM-DD
+    
+    if (lastReadDate == today) {
+      if (mounted) setState(() => _isAlertRead = true);
+    }
+  }
+
+  Future<void> _markAlertAsRead() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    
+    // Saves today's date in local memory
+    await prefs.setString('lastAlertReadDate', today);
+    
+    // Updates UI to remove the red badge instantly
+    if (mounted) setState(() => _isAlertRead = true);
+
+    // Stops the phone from sending any more notifications for today!
+    await NotificationService.cancelAndRescheduleForTomorrow();
+  }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -45,7 +89,7 @@ class DashboardScreen extends StatelessWidget {
                 await FirebaseFirestore.instance
                     .collection('users')
                     .doc(uid)
-                    .update({'farmName': nameCtrl.text.trim()});
+                    .set({'farmName': nameCtrl.text.trim()}, SetOptions(merge: true));
               }
               if (context.mounted) Navigator.pop(context);
             },
@@ -154,6 +198,9 @@ class DashboardScreen extends StatelessWidget {
   }
 
   void _showAlertsPanel(BuildContext context) {
+    // TRIGGER THE READ EVENT!
+    _markAlertAsRead();
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -263,7 +310,10 @@ class DashboardScreen extends StatelessWidget {
                       builder: (context, snapshot) {
                         String farmName = 'Farm Dashboard';
                         if (snapshot.hasData && snapshot.data!.exists) {
-                          farmName = snapshot.data!.get('farmName') ?? 'Farm Dashboard';
+                          final data = snapshot.data!.data() as Map<String, dynamic>?;
+                          if (data != null && data.containsKey('farmName')) {
+                            farmName = data['farmName'] ?? 'Farm Dashboard';
+                          }
                         }
                         return Text(
                           farmName, 
@@ -287,7 +337,13 @@ class DashboardScreen extends StatelessWidget {
                             onPressed: () {
                               Navigator.pop(context); 
                               FirebaseFirestore.instance.collection('users').doc(user?.uid).get().then((doc) {
-                                String currentName = doc.data()?['farmName'] ?? '';
+                                String currentName = '';
+                                if (doc.exists && doc.data() != null) {
+                                  final data = doc.data() as Map<String, dynamic>;
+                                  if (data.containsKey('farmName')) {
+                                    currentName = data['farmName'] ?? '';
+                                  }
+                                }
                                 _showEditProfileDialog(context, currentName);
                               });
                             },
@@ -295,13 +351,9 @@ class DashboardScreen extends StatelessWidget {
                           ),
                           TextButton(
                             onPressed: () async {
-                              // 1. Wipe the local memory instantly!
                               context.read<FarmProvider>().clearData();
-                              
-                              // 2. Sign out of Firebase
                               await FirebaseAuth.instance.signOut();
                               
-                              // 3. Send the user back to the login screen
                               if (context.mounted) {
                                 Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
                                   MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -346,7 +398,8 @@ class DashboardScreen extends StatelessWidget {
                     onTap: () => _showLogMortalityDialog(context),
                     child: _buildStatColumn('Deaths', farm.totalMortalityThisWeek.toString(), color: const Color(0xFFE05050)),
                   ),
-                  _buildAlertBadge(context, 1), 
+                  // Send 0 to the badge if read today, otherwise send 1
+                  _buildAlertBadge(context, _isAlertRead ? 0 : 1), 
                 ],
               ),
             ),

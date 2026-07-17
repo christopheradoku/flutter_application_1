@@ -13,9 +13,24 @@ class FeedTrackingScreen extends StatefulWidget {
 }
 
 class _FeedTrackingScreenState extends State<FeedTrackingScreen> {
-  int _activeDay = 6; // index into the 7-day window returned by the provider; defaults to "today"
+  int _activeDay = 6; 
 
-  static const List<String> _dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  // --- NEW: Dynamic Date Calculator ---
+  String _getDynamicDayName(int index) {
+    if (index < 0 || index > 6) return '';
+    final today = DateTime.now();
+    final dateOfColumn = today.subtract(Duration(days: 6 - index));
+    switch (dateOfColumn.weekday) {
+      case 1: return 'Mon';
+      case 2: return 'Tue';
+      case 3: return 'Wed';
+      case 4: return 'Thu';
+      case 5: return 'Fri';
+      case 6: return 'Sat';
+      case 7: return 'Sun';
+      default: return '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +128,8 @@ class _FeedTrackingScreenState extends State<FeedTrackingScreen> {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(_dayLabels[i % 7], style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isActive ? const Color(0xFFC07010) : const Color(0x663C320A))),
+                              // --- UPDATED DYNAMIC TEXT ---
+                              Text(_getDynamicDayName(i), style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isActive ? const Color(0xFFC07010) : const Color(0x663C320A))),
                             ],
                           ),
                         ),
@@ -125,7 +141,8 @@ class _FeedTrackingScreenState extends State<FeedTrackingScreen> {
 
                 const SizedBox(height: 8),
                 Center(
-                  child: Text('${_dayLabels[_activeDay % 7]}: ${consumption[_activeDay].toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFC07010))),
+                  // --- UPDATED DYNAMIC TEXT ---
+                  child: Text('${_getDynamicDayName(_activeDay)}: ${consumption[_activeDay].toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFC07010))),
                 )
               ],
             ),
